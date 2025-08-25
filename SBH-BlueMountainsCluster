@@ -1,493 +1,334 @@
-import React, { useMemo, useState } from "react";
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <title>Nickreative — Estimate Calculator</title>
+    <!-- Minimal styles to mimic the utility classes used -->
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+      .max-w-4xl { max-width: 64rem; }
+      .mb-6 { margin-bottom: 1.5rem; } .mb-8 { margin-bottom: 2rem; }
+      .mt-1 { margin-top: .25rem; } .mt-3 { margin-top: .75rem; }
+      .space-y-2 > * + * { margin-top: .5rem; }
+      .space-y-8 > * + * { margin-top: 2rem; }
+      .grid { display: grid; } .gap-4 { gap: 1rem; }
+      @media (min-width: 640px){ .sm\:grid-cols-3{ grid-template-columns: repeat(3,minmax(0,1fr)); } }
+      .flex { display:flex; } .items-center { align-items:center; } .justify-between { justify-content: space-between; }
+      .gap-2 { gap: .5rem; } .gap-3 { gap: .75rem; } .gap-6 { gap: 1.5rem; }
+      .text-xs { font-size: .75rem; } .text-sm { font-size: .875rem; }
+      .text-base { font-size: 1rem; } .text-xl { font-size: 1.25rem; }
+      .font-medium { font-weight: 500; } .font-semibold { font-weight: 600; } .font-bold { font-weight:700; }
+      .text-gray-600 { color: #4b5563; } .text-gray-800 { color: #1f2937; } .text-white { color: #fff; }
+      .border { border: 1px solid #e5e7eb; } .rounded { border-radius: .5rem; }
+      .p-2 { padding: .5rem; } .p-3 { padding: .75rem; }
+      .px-4 { padding-left: 1rem; padding-right: 1rem; } .py-2 { padding-top: .5rem; padding-bottom: .5rem; }
+      .bg-gray-900 { background: #111827; }
+      hr { border: 0; border-top: 1px solid #e5e7eb; margin: .5rem 0; }
+    </style>
+    <!-- React 18 + ReactDOM 18 (UMD) and Babel for in-browser JSX transform -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
 
-// Nickreative Estimate Calculator — React (single file)
-// Notes:
-// - Currency: AUD, ex GST. No rounding beyond cents.
-// - Language: Australian English. Avoid the word "discount"; use "Advantage" phrasing.
-// - Padding: 100px top and left per user request.
-// - Single-mode enforcement: only one of Retainer or One‑off active at a time.
-// - "Estimate calculator" positioning; final quote bespoke.
+    <script type="text/babel">
+      // === Nickreative Estimate Calculator — React (single file) ===
+      const { useMemo, useState } = React;
 
-const currency = (n) =>
-  n.toLocaleString("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      const currency = (n) =>
+        n.toLocaleString("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
-const RETAINER_RATES = {
-  R1: { label: "Retainer 1", rate: 1400 },
-  R2: { label: "Retainer 2", rate: 2000 },
-  R3: { label: "Retainer 3", rate: 2500 },
-};
+      const RETAINER_RATES = {
+        R1: { label: "Retainer 1", rate: 1400 },
+        R2: { label: "Retainer 2", rate: 2000 },
+        R3: { label: "Retainer 3", rate: 2500 },
+      };
 
-const TERM_OPTIONS = [
-  { key: "M2M", label: "Month-to-month", months: 1, advantage: 0 },
-  { key: "3M", label: "3-Month Contract", months: 3, advantage: 0.05 },
-  { key: "6M", label: "6-Month Contract", months: 6, advantage: 0.07 },
-  { key: "9M", label: "9-Month Contract", months: 9, advantage: 0.10 },
-  { key: "12M", label: "12-Month Contract", months: 12, advantage: 0.12 },
-];
-
-function multiVenueAdvantage(venues) {
-  if (venues <= 1) return 0;
-  if (venues <= 3) return 0.10;
-  return 0.15; // 4–8
-}
-
-function setupFee(venues) {
-  if (venues <= 0) return 0;
-  if (venues === 1) return 500;
-  return 500 + 250 * (venues - 1);
-}
-
-function computeRetainer({ venues, retainerKey, termKey }) {
-  const rate = RETAINER_RATES[retainerKey]?.rate ?? 0;
-  const term = TERM_OPTIONS.find((t) => t.key === termKey) ?? TERM_OPTIONS[0];
-  const baseMonthly = rate * venues; // per venue per month
-  const venueAdv = multiVenueAdvantage(venues);
-  const termAdv = term.advantage;
-  const afterVenue = baseMonthly * (1 - venueAdv);
-  const monthlyPartnership = afterVenue * (1 - termAdv);
-  const months = term.months;
-  const contractTotal = monthlyPartnership * months;
-  const oneOffSetup = setupFee(venues);
-
-  return {
-    baseMonthly,
-    venueAdv,
-    termAdv,
-    monthlyPartnership,
-    months,
-    contractTotal,
-    oneOffSetup,
-    grandTotal: contractTotal + oneOffSetup,
-  };
-}
-
-// One‑off calculators
-function photographyTotal(days) {
-  if (days <= 0) return 0;
-  if (days === 1) return 1600;
-  return 1200 * days; // 2+ days
-}
-
-function socialTotal(days) {
-  if (days <= 0) return 0;
-  if (days === 1) return 800;
-  return 600 * days; // 2+ days
-}
-
-function eventCoverage(hours) {
-  if (!hours) return 0;
-  // Strictly linear: $600 per 2 hours
-  return (hours / 2) * 600;
-}
-
-function videographyTotal(days) {
-  if (days <= 0) return 0;
-  return 2200 * days; // from $2200/day (non-editable here)
-}
-
-function editingTotal(days) {
-  if (days <= 0) return 0;
-  return 800 * days; // from $800/day (non-editable here)
-}
-
-function travelCost(days) {
-  if (days <= 0) return 0;
-  if (days <= 2) return 800; // 1–2 day visits
-  return 1000 + 50 * days; // 3+ days: $1000 base + $50/day
-}
-
-function computeOneOff({
-  photoDays,
-  socialDays,
-  eventHours,
-  videoDays,
-  editDays,
-  travelDays,
-}) {
-  const photo = photographyTotal(photoDays);
-  const social = socialTotal(socialDays);
-  const events = eventCoverage(eventHours);
-  const video = videographyTotal(videoDays);
-  const edit = editingTotal(editDays);
-
-  const other = events + video + edit; // "Other" category subtotal
-
-  // Category flags
-  const hasPhoto = photoDays > 0;
-  const hasSocial = socialDays > 0;
-  const hasOther = eventHours > 0 || videoDays > 0 || editDays > 0;
-  const categoryCount = [hasPhoto, hasOther, hasSocial].filter(Boolean).length;
-
-  const eligibleSubtotal = photo + social + other;
-  const bundleAdvPct = categoryCount >= 2 ? 0.20 : 0; // 20% when 2+ categories
-  const bundleAdvAmount = eligibleSubtotal * bundleAdvPct;
-
-  const travel = travelCost(travelDays); // excluded from bundle advantage
-
-  const total = eligibleSubtotal - bundleAdvAmount + travel;
-
-  return {
-    photo,
-    social,
-    events,
-    video,
-    edit,
-    other,
-    eligibleSubtotal,
-    bundleAdvPct,
-    bundleAdvAmount,
-    travel,
-    total,
-    categoryCount,
-  };
-}
-
-export default function EstimateCalculator() {
-  const [mode, setMode] = useState("retainer"); // 'retainer' | 'oneoff'
-
-  // Retainer state
-  const [venues, setVenues] = useState(1);
-  const [retainerKey, setRetainerKey] = useState("R2");
-  const [termKey, setTermKey] = useState("M2M");
-
-  // One‑off state
-  const [photoDays, setPhotoDays] = useState(0);
-  const [socialDays, setSocialDays] = useState(0);
-  const [eventHours, setEventHours] = useState(0); // 0, 2, 4, 6
-  const [videoDays, setVideoDays] = useState(0);
-  const [editDays, setEditDays] = useState(0);
-  const [travelDays, setTravelDays] = useState(0); // 0–10; 0 means not set
-
-  const retainer = useMemo(
-    () => computeRetainer({ venues, retainerKey, termKey }),
-    [venues, retainerKey, termKey]
-  );
-
-  const oneoff = useMemo(
-    () =>
-      computeOneOff({
-        photoDays,
-        socialDays,
-        eventHours,
-        videoDays,
-        editDays,
-        travelDays,
-      }),
-    [photoDays, socialDays, eventHours, videoDays, editDays, travelDays]
-  );
-
-  const summaryText = useMemo(() => {
-    if (mode === "retainer") {
-      const term = TERM_OPTIONS.find((t) => t.key === termKey);
-      const rateObj = RETAINER_RATES[retainerKey];
-      const lines = [
-        `ESTIMATE — Retainer (ex GST, AUD)`,
-        `Retainer: ${rateObj.label} at ${currency(rateObj.rate)} per venue per month`,
-        `Venues: ${venues}`,
-        `Multi‑venue Advantage: ${(multiVenueAdvantage(venues) * 100).toFixed(0)}%`,
-        `Term: ${term?.label} (Term Advantage ${(term?.advantage ?? 0) * 100}% )`,
-        `Monthly partnership rate (after advantages): ${currency(retainer.monthlyPartnership)}`,
-        `Contract total (${term?.months} month${term?.months === 1 ? "" : "s"}): ${currency(
-          retainer.contractTotal
-        )}`,
-        `One‑off setup & strategy: ${currency(retainer.oneOffSetup)}`,
-        `Grand total (contract + setup): ${currency(retainer.grandTotal)}`,
+      const TERM_OPTIONS = [
+        { key: "M2M", label: "Month-to-month", months: 1, advantage: 0 },
+        { key: "3M", label: "3-Month Contract", months: 3, advantage: 0.05 },
+        { key: "6M", label: "6-Month Contract", months: 6, advantage: 0.07 },
+        { key: "9M", label: "9-Month Contract", months: 9, advantage: 0.10 },
+        { key: "12M", label: "12-Month Contract", months: 12, advantage: 0.12 },
       ];
-      return lines.join("\n");
-    }
 
-    // One‑off summary
-    const blocks = [];
-    if (oneoff.photo) blocks.push(`Photography: ${currency(oneoff.photo)}`);
-    if (oneoff.social) blocks.push(`Social Media Content Creation: ${currency(oneoff.social)}`);
-    if (oneoff.events) blocks.push(`Event coverage: ${currency(oneoff.events)}`);
-    if (oneoff.video) blocks.push(`Videography (from): ${currency(oneoff.video)}`);
-    if (oneoff.edit) blocks.push(`Video editing (from): ${currency(oneoff.edit)}`);
-    if (oneoff.bundleAdvAmount > 0) {
-      blocks.push(
-        `Bundle Advantage (20% on eligible one‑off services across ${oneoff.categoryCount} categories): -${currency(
-          oneoff.bundleAdvAmount
-        )}`
-      );
-    }
-    if (oneoff.travel) blocks.push(`Travel (once per job): ${currency(oneoff.travel)}`);
+      function multiVenueAdvantage(venues) {
+        if (venues <= 1) return 0;
+        if (venues <= 3) return 0.10;
+        return 0.15; // 4–8
+      }
 
-    const lines = [
-      `ESTIMATE — One‑off (ex GST, AUD)`,
-      ...blocks,
-      `Total: ${currency(oneoff.total)}`,
-    ];
-    return lines.join("\n");
-  }, [mode, retainer, oneoff, venues, retainerKey, termKey]);
+      function setupFee(venues) {
+        if (venues <= 0) return 0;
+        if (venues === 1) return 500;
+        return 500 + 250 * (venues - 1);
+      }
 
-  const copySummary = async () => {
-    try {
-      await navigator.clipboard.writeText(summaryText);
-      alert("Summary copied to clipboard.");
-    } catch (e) {
-      console.error(e);
-      alert("Could not copy. You can select the text and copy manually.");
-    }
-  };
+      function computeRetainer({ venues, retainerKey, termKey }) {
+        const rate = RETAINER_RATES[retainerKey]?.rate ?? 0;
+        const term = TERM_OPTIONS.find((t) => t.key === termKey) ?? TERM_OPTIONS[0];
+        const baseMonthly = rate * venues; // per venue per month
+        const venueAdv = multiVenueAdvantage(venues);
+        const termAdv = term.advantage;
+        const afterVenue = baseMonthly * (1 - venueAdv);
+        const monthlyPartnership = afterVenue * (1 - termAdv);
+        const months = term.months;
+        const contractTotal = monthlyPartnership * months;
+        const oneOffSetup = setupFee(venues);
+        return { baseMonthly, venueAdv, termAdv, monthlyPartnership, months, contractTotal, oneOffSetup, grandTotal: contractTotal + oneOffSetup };
+      }
 
-  // UI helpers
-  const Section = ({ title, children }) => (
-    <div className="mb-8">
-      <h2 className="text-xl font-semibold mb-3">{title}</h2>
-      <div className="grid gap-4">{children}</div>
-    </div>
-  );
+      function photographyTotal(days) { if (days <= 0) return 0; if (days === 1) return 1600; return 1200 * days; }
+      function socialTotal(days) { if (days <= 0) return 0; if (days === 1) return 800; return 600 * days; }
+      function eventCoverage(hours) { if (!hours) return 0; return (hours / 2) * 600; }
+      function videographyTotal(days) { if (days <= 0) return 0; return 2200 * days; }
+      function editingTotal(days) { if (days <= 0) return 0; return 800 * days; }
 
-  const Label = ({ children }) => (
-    <label className="text-sm font-medium text-gray-800">{children}</label>
-  );
+      function travelCost(days) {
+        if (days <= 0) return 0;
+        if (days <= 2) return 800; // 1–2 day visits
+        return 1000 + 50 * days;   // 3+ days
+      }
 
-  return (
-    <div style={{ paddingTop: "100px", paddingLeft: "100px" }} className="max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Nickreative — Estimate Calculator</h1>
-        <p className="text-gray-600 mt-1">All figures ex GST, in AUD. This is an estimate calculator; final quotes are bespoke.</p>
-      </div>
+      function computeOneOff({ photoDays, socialDays, eventHours, videoDays, editDays, travelDays }) {
+        const photo = photographyTotal(photoDays);
+        const social = socialTotal(socialDays);
+        const events = eventCoverage(eventHours);
+        const video = videographyTotal(videoDays);
+        const edit = editingTotal(editDays);
+        const other = events + video + edit;
 
-      {/* Mode Toggle */}
-      <div className="flex items-center gap-6 mb-8">
-        <div className="flex items-center gap-2">
-          <input
-            type="radio"
-            id="mode-retainer"
-            name="mode"
-            checked={mode === "retainer"}
-            onChange={() => setMode("retainer")}
-          />
-          <Label>
-            <span>Retainer</span>
-          </Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="radio"
-            id="mode-oneoff"
-            name="mode"
-            checked={mode === "oneoff"}
-            onChange={() => setMode("oneoff")}
-          />
-          <Label>
-            <span>One‑off</span>
-          </Label>
-        </div>
-      </div>
+        const hasPhoto = photoDays > 0;
+        const hasSocial = socialDays > 0;
+        const hasOther = eventHours > 0 || videoDays > 0 || editDays > 0;
+        const categoryCount = [hasPhoto, hasOther, hasSocial].filter(Boolean).length;
 
-      {mode === "retainer" ? (
-        <div className="space-y-8">
-          <Section title="Retainer configuration">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="flex flex-col gap-2">
-                <Label>Number of venues (1–8)</Label>
-                <select
-                  className="border rounded p-2"
-                  value={venues}
-                  onChange={(e) => setVenues(Math.max(1, Math.min(8, parseInt(e.target.value, 10) || 1)))}
-                >
-                  {Array.from({ length: 8 }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
+        const eligibleSubtotal = photo + social + other;
+        const bundleAdvPct = categoryCount >= 2 ? 0.20 : 0; // 20%
+        const bundleAdvAmount = eligibleSubtotal * bundleAdvPct;
+
+        const travel = travelCost(travelDays); // excluded
+        const total = eligibleSubtotal - bundleAdvAmount + travel;
+
+        return { photo, social, events, video, edit, other, eligibleSubtotal, bundleAdvPct, bundleAdvAmount, travel, total, categoryCount };
+      }
+
+      function EstimateCalculator() {
+        const [mode, setMode] = useState("retainer");
+
+        const [venues, setVenues] = useState(1);
+        const [retainerKey, setRetainerKey] = useState("R2");
+        const [termKey, setTermKey] = useState("M2M");
+
+        const [photoDays, setPhotoDays] = useState(0);
+        const [socialDays, setSocialDays] = useState(0);
+        const [eventHours, setEventHours] = useState(0);
+        const [videoDays, setVideoDays] = useState(0);
+        const [editDays, setEditDays] = useState(0);
+        const [travelDays, setTravelDays] = useState(0);
+
+        const retainer = useMemo(() => computeRetainer({ venues, retainerKey, termKey }), [venues, retainerKey, termKey]);
+        const oneoff = useMemo(() => computeOneOff({ photoDays, socialDays, eventHours, videoDays, editDays, travelDays }), [photoDays, socialDays, eventHours, videoDays, editDays, travelDays]);
+
+        const summaryText = useMemo(() => {
+          if (mode === "retainer") {
+            const term = TERM_OPTIONS.find((t) => t.key === termKey);
+            const rateObj = RETAINER_RATES[retainerKey];
+            const lines = [
+              `ESTIMATE — Retainer (ex GST, AUD)`,
+              `Retainer: ${rateObj.label} at ${currency(rateObj.rate)} per venue per month`,
+              `Venues: ${venues}`,
+              `Multi-venue Advantage: ${(multiVenueAdvantage(venues) * 100).toFixed(0)}%`,
+              `Term: ${term?.label} (Term Advantage ${(term?.advantage ?? 0) * 100}% )`,
+              `Monthly partnership rate (after advantages): ${currency(retainer.monthlyPartnership)}`,
+              `Contract total (${term?.months} month${term?.months === 1 ? "" : "s"}): ${currency(retainer.contractTotal)}`,
+              `One-off setup & strategy: ${currency(retainer.oneOffSetup)}`,
+              `Grand total (contract + setup): ${currency(retainer.grandTotal)}`
+            ];
+            return lines.join("\n");
+          }
+          const blocks = [];
+          if (oneoff.photo) blocks.push(`Photography: ${currency(oneoff.photo)}`);
+          if (oneoff.social) blocks.push(`Social Media Content Creation: ${currency(oneoff.social)}`);
+          if (oneoff.events) blocks.push(`Event coverage: ${currency(oneoff.events)}`);
+          if (oneoff.video) blocks.push(`Videography (from): ${currency(oneoff.video)}`);
+          if (oneoff.edit) blocks.push(`Video editing (from): ${currency(oneoff.edit)}`);
+          if (oneoff.bundleAdvAmount > 0) {
+            blocks.push(`Bundle Advantage (20% on eligible one-off services across ${oneoff.categoryCount} categories): -${currency(oneoff.bundleAdvAmount)}`);
+          }
+          if (oneoff.travel) blocks.push(`Travel (once per job): ${currency(oneoff.travel)}`);
+          return [`ESTIMATE — One-off (ex GST, AUD)`, ...blocks, `Total: ${currency(oneoff.total)}`].join("\n");
+        }, [mode, retainer, oneoff, venues, retainerKey, termKey]);
+
+        const copySummary = async () => {
+          try { await navigator.clipboard.writeText(summaryText); alert("Summary copied to clipboard."); }
+          catch { alert("Could not copy. You can select the text and copy manually."); }
+        };
+
+        const Section = ({ title, children }) => (
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold mb-3">{title}</h2>
+            <div className="grid gap-4">{children}</div>
+          </div>
+        );
+        const Label = ({ children }) => <label className="text-sm font-medium text-gray-800">{children}</label>;
+
+        return (
+          <div style={{ paddingTop: "100px", paddingLeft: "100px" }} className="max-w-4xl">
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold">Nickreative — Estimate Calculator</h1>
+              <p className="text-gray-600 mt-1">All figures ex GST, in AUD. This is an estimate calculator; final quotes are bespoke.</p>
+            </div>
+
+            <div className="flex items-center gap-6 mb-8">
+              <div className="flex items-center gap-2">
+                <input type="radio" name="mode" checked={mode === "retainer"} onChange={() => setMode("retainer")} />
+                <Label><span>Retainer</span></Label>
               </div>
-
-              <div className="flex flex-col gap-2">
-                <Label>Retainer type</Label>
-                <select
-                  className="border rounded p-2"
-                  value={retainerKey}
-                  onChange={(e) => setRetainerKey(e.target.value)}
-                >
-                  {Object.entries(RETAINER_RATES).map(([key, val]) => (
-                    <option key={key} value={key}>
-                      {val.label} — {currency(val.rate)} / venue / month
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label>Contract range</Label>
-                <select
-                  className="border rounded p-2"
-                  value={termKey}
-                  onChange={(e) => setTermKey(e.target.value)}
-                >
-                  {TERM_OPTIONS.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.label} {t.advantage > 0 ? `— Term Advantage ${Math.round(t.advantage * 100)}%` : ""}
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center gap-2">
+                <input type="radio" name="mode" checked={mode === "oneoff"} onChange={() => setMode("oneoff")} />
+                <Label><span>One-off</span></Label>
               </div>
             </div>
-          </Section>
 
-          <Section title="Estimate">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Base monthly (venues × retainer)</span>
-                <span>{currency(retainer.baseMonthly)}</span>
+            {mode === "retainer" ? (
+              <div className="space-y-8">
+                <Section title="Retainer configuration">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <Label>Number of venues (1–8)</Label>
+                      <select className="border rounded p-2" value={venues} onChange={(e) => setVenues(Math.max(1, Math.min(8, parseInt(e.target.value, 10) || 1)))}>
+                        {Array.from({ length: 8 }, (_, i) => i + 1).map((n) => (<option key={n} value={n}>{n}</option>))}
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label>Retainer type</Label>
+                      <select className="border rounded p-2" value={retainerKey} onChange={(e) => setRetainerKey(e.target.value)}>
+                        {Object.entries(RETAINER_RATES).map(([key, val]) => (
+                          <option key={key} value={key}>{val.label} — {currency(val.rate)} / venue / month</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label>Contract range</Label>
+                      <select className="border rounded p-2" value={termKey} onChange={(e) => setTermKey(e.target.value)}>
+                        {TERM_OPTIONS.map((t) => (
+                          <option key={t.key} value={t.key}>{t.label} {t.advantage > 0 ? `— Term Advantage ${Math.round(t.advantage * 100)}%` : ""}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </Section>
+
+                <Section title="Estimate">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span>Base monthly (venues × retainer)</span><span>{currency(retainer.baseMonthly)}</span></div>
+                    <div className="flex justify-between"><span>Multi-venue Advantage ({Math.round(multiVenueAdvantage(venues) * 100)}%)</span><span>-{currency(retainer.baseMonthly * multiVenueAdvantage(venues))}</span></div>
+                    <div className="flex justify-between"><span>Term Advantage ({Math.round((TERM_OPTIONS.find((t) => t.key === termKey)?.advantage || 0) * 100)}%)</span><span>-{currency(retainer.baseMonthly * (1 - multiVenueAdvantage(venues)) * (TERM_OPTIONS.find((t) => t.key === termKey)?.advantage || 0))}</span></div>
+                    <div className="flex justify-between font-medium"><span>Monthly partnership rate (after advantages)</span><span>{currency(retainer.monthlyPartnership)}</span></div>
+                    <hr />
+                    <div className="flex justify-between"><span>Contract total ({retainer.months} month{retainer.months === 1 ? "" : "s"})</span><span>{currency(retainer.contractTotal)}</span></div>
+                    <div className="flex justify-between"><span>One-off setup & strategy</span><span>{currency(retainer.oneOffSetup)}</span></div>
+                    <div className="flex justify-between text-base font-semibold"><span>Grand total (contract + setup)</span><span>{currency(retainer.grandTotal)}</span></div>
+                  </div>
+                </Section>
               </div>
-              <div className="flex justify-between">
-                <span>Multi‑venue Advantage ({Math.round(multiVenueAdvantage(venues) * 100)}%)</span>
-                <span>-{currency(retainer.baseMonthly * multiVenueAdvantage(venues))}</span>
+            ) : (
+              <div className="space-y-8">
+                <Section title="One-off configuration">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <Label>Photography — days (0–10)</Label>
+                      <select className="border rounded p-2" value={photoDays} onChange={(e) => setPhotoDays(Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)))}>
+                        {Array.from({ length: 11 }, (_, i) => i).map((n) => (<option key={n} value={n}>{n}</option>))}
+                      </select>
+                      <div className="text-xs text-gray-600">1 day = {currency(1600)}; 2+ days = {currency(1200)}/day</div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label>Social Media Content — days (0–10)</Label>
+                      <select className="border rounded p-2" value={socialDays} onChange={(e) => setSocialDays(Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)))}>
+                        {Array.from({ length: 11 }, (_, i) => i).map((n) => (<option key={n} value={n}>{n}</option>))}
+                      </select>
+                      <div className="text-xs text-gray-600">1 day = {currency(800)}; 2+ days = {currency(600)}/day</div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label>Event coverage — hours</Label>
+                      <select className="border rounded p-2" value={eventHours} onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        setEventHours([0,2,4,6].includes(v) ? v : 0);
+                      }}>
+                        {[0, 2, 4, 6].map((n) => (<option key={n} value={n}>{n}</option>))}
+                      </select>
+                      <div className="text-xs text-gray-600">{currency(600)} per 2 hours (strictly linear). Eligible for Bundle Advantage.</div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label>Videography (from) — days (0–10)</Label>
+                      <select className="border rounded p-2" value={videoDays} onChange={(e) => setVideoDays(Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)))}>
+                        {Array.from({ length: 11 }, (_, i) => i).map((n) => (<option key={n} value={n}>{n}</option>))}
+                      </select>
+                      <div className="text-xs text-gray-600">From {currency(2200)}/day. Rate finalised outside this calculator.</div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label>Video editing (from) — days (0–10)</Label>
+                      <select className="border rounded p-2" value={editDays} onChange={(e) => setEditDays(Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)))}>
+                        {Array.from({ length: 11 }, (_, i) => i).map((n) => (<option key={n} value={n}>{n}</option>))}
+                      </select>
+                      <div className="text-xs text-gray-600">From {currency(800)}/day. Rate finalised outside this calculator.</div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label>Travel — visit length (days 0–10)</Label>
+                      <select className="border rounded p-2" value={travelDays} onChange={(e) => setTravelDays(Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)))}>
+                        {Array.from({ length: 11 }, (_, i) => i).map((n) => (<option key={n} value={n}>{n}</option>))}
+                      </select>
+                      <div className="text-xs text-gray-600">1–2 days: {currency(800)} total. 3+ days: {currency(1000)} base + {currency(50)}/day.</div>
+                    </div>
+                  </div>
+                </Section>
+
+                <Section title="Estimate">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span>Photography</span><span>{currency(oneoff.photo)}</span></div>
+                    <div className="flex justify-between"><span>Social Media Content Creation</span><span>{currency(oneoff.social)}</span></div>
+                    <div className="flex justify-between"><span>Event coverage</span><span>{currency(oneoff.events)}</span></div>
+                    <div className="flex justify-between"><span>Videography (from)</span><span>{currency(oneoff.video)}</span></div>
+                    <div className="flex justify-between"><span>Video editing (from)</span><span>{currency(oneoff.edit)}</span></div>
+                    <hr />
+                    <div className="flex justify-between"><span>Eligible one-off subtotal</span><span>{currency(oneoff.eligibleSubtotal)}</span></div>
+                    <div className="flex justify-between"><span>Bundle Advantage {oneoff.bundleAdvPct > 0 ? `(${Math.round(oneoff.bundleAdvPct * 100)}% across ${oneoff.categoryCount} categories)` : "(not applicable)"}</span><span>{oneoff.bundleAdvPct > 0 ? `-${currency(oneoff.bundleAdvAmount)}` : currency(0)}</span></div>
+                    <div className="flex justify-between"><span>Travel (once per job)</span><span>{currency(oneoff.travel)}</span></div>
+                    <div className="flex justify-between text-base font-semibold"><span>Total</span><span>{currency(oneoff.total)}</span></div>
+                  </div>
+                </Section>
               </div>
-              <div className="flex justify-between">
-                <span>Term Advantage ({Math.round(TERM_OPTIONS.find((t) => t.key === termKey)?.advantage * 100 || 0)}%)</span>
-                <span>-{currency(retainer.baseMonthly * (1 - multiVenueAdvantage(venues)) * (TERM_OPTIONS.find((t) => t.key === termKey)?.advantage || 0))}</span>
+            )}
+
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold mb-3">Shareable summary</h2>
+              <textarea className="w-full h-48 border rounded p-3 text-sm" value={summaryText} readOnly></textarea>
+              <div className="flex gap-3 mt-2">
+                <button onClick={copySummary} className="px-4 py-2 rounded bg-gray-900 text-white">Copy summary</button>
               </div>
-              <div className="flex justify-between font-medium">
-                <span>Monthly partnership rate (after advantages)</span>
-                <span>{currency(retainer.monthlyPartnership)}</span>
-              </div>
-              <hr />
-              <div className="flex justify-between">
-                <span>Contract total ({retainer.months} month{retainer.months === 1 ? "" : "s"})</span>
-                <span>{currency(retainer.contractTotal)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>One‑off setup & strategy</span>
-                <span>{currency(retainer.oneOffSetup)}</span>
-              </div>
-              <div className="flex justify-between text-base font-semibold">
-                <span>Grand total (contract + setup)</span>
-                <span>{currency(retainer.grandTotal)}</span>
-              </div>
+              <p className="text-xs text-gray-600 mt-3">Figures are estimates only and exclude GST. Travel is applied once per job. Advantages are applied sequentially where relevant.</p>
             </div>
-          </Section>
-        </div>
-      ) : (
-        <div className="space-y-8">
-          <Section title="One‑off configuration">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="flex flex-col gap-2">
-                <Label>Photography — days (0–10)</Label>
-                <select
-                  className="border rounded p-2"
-                  value={photoDays}
-                  onChange={(e) => setPhotoDays(Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)))}
-                >
-                  {Array.from({ length: 11 }, (_, i) => i).map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                <div className="text-xs text-gray-600">1 day = {currency(1600)}; 2+ days = {currency(1200)}/day</div>
-              </div>
+          </div>
+        );
+      }
 
-              <div className="flex flex-col gap-2">
-                <Label>Social Media Content — days (0–10)</Label>
-                <select
-                  className="border rounded p-2"
-                  value={socialDays}
-                  onChange={(e) => setSocialDays(Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)))}
-                >
-                  {Array.from({ length: 11 }, (_, i) => i).map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                <div className="text-xs text-gray-600">1 day = {currency(800)}; 2+ days = {currency(600)}/day</div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label>Event coverage — hours</Label>
-                <select
-                  className="border rounded p-2"
-                  value={eventHours}
-                  onChange={(e) => setEventHours([0, 2, 4, 6].includes(parseInt(e.target.value, 10)) ? parseInt(e.target.value, 10) : 0)}
-                >
-                  {[0, 2, 4, 6].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                <div className="text-xs text-gray-600">{currency(600)} per 2 hours (strictly linear). Eligible for Bundle Advantage.</div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label>Videography (from) — days (0–10)</Label>
-                <select
-                  className="border rounded p-2"
-                  value={videoDays}
-                  onChange={(e) => setVideoDays(Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)))}
-                >
-                  {Array.from({ length: 11 }, (_, i) => i).map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                <div className="text-xs text-gray-600">From {currency(2200)}/day. Rate finalised outside this calculator.</div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label>Video editing (from) — days (0–10)</Label>
-                <select
-                  className="border rounded p-2"
-                  value={editDays}
-                  onChange={(e) => setEditDays(Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)))}
-                >
-                  {Array.from({ length: 11 }, (_, i) => i).map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                <div className="text-xs text-gray-600">From {currency(800)}/day. Rate finalised outside this calculator.</div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label>Travel — visit length (days 0–10)</Label>
-                <select
-                  className="border rounded p-2"
-                  value={travelDays}
-                  onChange={(e) => setTravelDays(Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)))}
-                >
-                  {Array.from({ length: 11 }, (_, i) => i).map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                <div className="text-xs text-gray-600">1–2 days: {currency(800)} total. 3+ days: {currency(1000)} base + {currency(50)}/day.</div>
-              </div>
-            </div>
-          </Section>
-
-          <Section title="Estimate">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span>Photography</span><span>{currency(oneoff.photo)}</span></div>
-              <div className="flex justify-between"><span>Social Media Content Creation</span><span>{currency(oneoff.social)}</span></div>
-              <div className="flex justify-between"><span>Event coverage</span><span>{currency(oneoff.events)}</span></div>
-              <div className="flex justify-between"><span>Videography (from)</span><span>{currency(oneoff.video)}</span></div>
-              <div className="flex justify-between"><span>Video editing (from)</span><span>{currency(oneoff.edit)}</span></div>
-              <hr />
-              <div className="flex justify-between"><span>Eligible one‑off subtotal</span><span>{currency(oneoff.eligibleSubtotal)}</span></div>
-              <div className="flex justify-between"><span>Bundle Advantage {oneoff.bundleAdvPct > 0 ? `(${Math.round(oneoff.bundleAdvPct * 100)}% across ${oneoff.categoryCount} categories)` : "(not applicable)"}</span><span>{oneoff.bundleAdvPct > 0 ? `-${currency(oneoff.bundleAdvAmount)}` : currency(0)}</span></div>
-              <div className="flex justify-between"><span>Travel (once per job)</span><span>{currency(oneoff.travel)}</span></div>
-              <div className="flex justify-between text-base font-semibold"><span>Total</span><span>{currency(oneoff.total)}</span></div>
-            </div>
-          </Section>
-        </div>
-      )}
-
-      <Section title="Shareable summary">
-        <textarea className="w-full h-48 border rounded p-3 text-sm" value={summaryText} readOnly />
-        <div className="flex gap-3 mt-2">
-          <button onClick={copySummary} className="px-4 py-2 rounded bg-gray-900 text-white">Copy summary</button>
-        </div>
-        <p className="text-xs text-gray-600 mt-3">Figures are estimates only and exclude GST. Travel is applied once per job. Advantages are applied sequentially where relevant.</p>
-      </Section>
-    </div>
-  );
-}
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<EstimateCalculator />);
+    </script>
+  </body>
+</html>
